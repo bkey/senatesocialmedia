@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.bar {
+  fill: steelblue;
+}
+
+.d3-tip {
+  line-height: 1;
+  font-weight: bold;
+  padding: 12px;
+  background: #fff;
+  color: #000;
+  border-radius: 2px;
+}
+
+.d3-tip2 {
+  line-height: 1;
+  font-weight: bold;
+  padding: 14px;
+  background: #FFF;
+  color: #000;
+  border-radius: 2px;
+}
+
+/* Creates a small triangle extender for the tooltip */
+.d3-tip:after {
+  box-sizing: border-box;
+  display: inline;
+  font-size: 10px;
+  width: 100%;
+  line-height: 1;
+  color: #fff;
+  content: "\25BC";
+  position: absolute;
+  text-align: center;
+}
+
+/* Style northward tooltips differently */
+.d3-tip.n:after {
+  margin: -1px 0 0 0;
+  top: 100%;
+  left: 0;
+}
+
+</style>
+<title>
+US Senators Social Media Usage
+</title>
+<body>
+<center>
+<p><h3> Social Media Usage of U.S. Senators July-October 2014</h3></p>
+
+<label><input type="checkbox">Sort By Value</label>
+
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="http://labratrevenge.com/d3-tip/javascripts/d3.tip.v0.6.3.js"></script>
+<script>
+
+function draw_senate(isTopics)
+{
+
+	var margin = {top: 20, right: 40, bottom: 80, left: 70},
+    	width = 1200 - margin.left - margin.right,
+    	height = 500 - margin.top - margin.bottom;
+
+	var x = d3.scale.ordinal()
+    	.rangeRoundBands([0, width], .1);
+
+	var y = d3.scale.linear()
+    	.rangeRound([height, 0]);
+
+	//rainbow!
+	var topicColor= d3.scale.ordinal()
+		.range(["#a6cee3","#1f78b4","#b2df8a","#33a02c","#fb9a99","#e31a1c","#fdbf6f","#ff7f00","#cab2d6","#6a3d9a","#DAA520","#8c510a"])
+	
+	//facebook and twitter blue
+	var twitterBlue = "#00aced"
+	var facebookBlue = "#3B5998"
+	var platformColors = d3.scale.ordinal()
+		.range([twitterBlue, facebookBlue]);
+	
+	var xAxis = d3.svg.axis()
+    	.scale(x)
+    	.orient("bottom");
+
+	var yAxis = d3.svg.axis()
+    	.scale(y)
+    	.orient("left")
+    	.tickFormat(d3.format(".2s"));
+    	
+    var topic_words = {};
+    function makechunks(str)
+  	{
+  		var s = str.split(" ");
+  		words = ""
+  		for (var i=0; i<s.length; i++){
+  			words += s[i] + " ";
+  			if (i % 8 == 0 && i != 0)
+  				words += "<BR />"
+  				
+  		}
+  		return words
+  	};
+    
+	var tip = d3.tip()
+  		.attr('class', 'd3-tip')
+  		.offset([-10, 0])
+  		.html(function(d) {
+  			var cats = ""
+  			var sorted = d.posts.sort(function(a, b){return (b.y1-b.y0)-(a.y1-a.y0)})
+  			var arrayLength = sorted.length;
+  			for (var i = 0; i < arrayLength; i++) {
+  				c = (sorted[i].y1-sorted[i].y0);
+  				cats += "<font color=" + topicColor(sorted[i].name) + ">" + 
+  				sorted[i].name + "&emsp;" + ((c/d.total)*100).toFixed(1) + "%</font> <BR />";
+  			}
+    		return "<h4>Senator " + d.FirstName + " " + d.Name + " (" + d.Party + ")</h4>" +
+    		"Facebook: " + d.FbPct + "<BR /> Twitter: " + (d.total - d.FbPct) + "<BR /> Total: " 
+    		+ d.total + "</strong><BR /><BR />" + cats
+  	})
+  	
+	var tip2 = d3.tip()
+  		.attr('class', 'd3-tip2')
+  		.offset([0, -200])
+  		.direction('w')
+  .		html(function(d) {
+  			return "Top Words: <br />" + makechunks(topic_words[d].words) +
+  			"<BR /><BR />Example Post: <BR /> " +
+  			makechunks(topic_words[d].example);
+  	  })
+
+	var svg = d3.select("body").append("svg")
+    	.attr("width", width + margin.left + margin.right)
+    	.attr("height", height + margin.top + margin.bottom)
+    	.append("g")
+    	.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    
+	svg.call(tip);
+	svg.call(tip2)
+	
+	d3.csv(("topicwords.csv"), function(topicwords) {
+			topicwords.forEach(function(data) {
+				data.title = data.title;
+				data.words = data.words;
+				data.example = data.example;
+				topic_words[data.title] = data;
+			});
+
+	d3.csv("topics.csv", function(error, data) {
+  		topicColor.domain(d3.keys(data[0]).filter(function(key) { return (key !== "Name" 
+  		&& key !== "FbPct" && key !== "FirstName" && key !== "Party"); }));
+
+  	data.forEach(function(d) {
+    	var y0 = 0;
+    	
+    	d.posts = topicColor.domain().map(function(name) { return {name: name, y0: y0, y1: y0 += +d[name]}; });
+    	d.total = d.posts[d.posts.length - 1].y1;
+    	
+  	});
+
+  	x.domain(data.map(function(d) { return d.Name; }));
+  	y.domain([0, d3.max(data, function(d) { return d.total; })]);
+
+  	svg.append("g")
+        .attr("class", "x axis")
+        .attr("transform", "translate(0," + height + ")")
+        .call(xAxis)
+        .selectAll("text")  
+            .style("text-anchor", "end")
+            .attr("dx", "-.8em")
+            .attr("dy", ".15em")
+            .attr("transform", function(d) {
+                return "rotate(-65)" 
+                });
+
+  	svg.append("g")
+      .attr("class", "y axis")
+      .call(yAxis)
+      .append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 6)
+      .attr("dy", ".71em")
+      .style("text-anchor", "end")
+      .text("Number of Posts");
+
+  	bar = svg.selectAll(".bar")
+      .data(data)
+      .enter().append("g")
+      .attr("class", "bar")
+      .attr("transform", function(d) { return "translate(" + x(d.Name) + ",0)"; })
+      .on('mouseover', tip.show)
+      .on('mouseout', tip.hide);
+
+  	bar.selectAll("rect")
+      .data(function(d) { return d.posts; })
+      .enter().append("rect")
+      .attr("width", x.rangeBand())
+      .attr("y", function(d) { return y(d.y1); })
+      .attr("height", function(d) { return y(d.y0) - y(d.y1); })
+      .style("fill", function(d) { return topicColor(d.name); });
+
+  	var legend = svg.selectAll(".legend")
+      .data(topicColor.domain().slice())
+      .enter().append("g")
+      .attr("class", "legend")
+      .attr("transform", function(d, i) { return "translate(0," + i * 20 + ")"; })
+      .on('mouseover', tip2.show)
+      .on('mouseout', tip2.hide);;
+
+  	legend.append("rect")
+      .attr("x", width - 18)
+      .attr("width", 18)
+      .attr("height", 18)
+      .style("fill", topicColor);
+
+  	legend.append("text")
+      .attr("x", width - 24)
+      .attr("y", 9)
+      .attr("dy", ".35em")
+      .style("text-anchor", "end")
+      .text(function(d) { return d; });
+      
+    d3.select("input").on("change", sort);
+      
+    function sort() {
+
+		var sorted_data = data.sort(this.checked
+           	       ? function(a, b) { return b.total - a.total; }
+        	       : function(a, b) { return d3.ascending(a.Name, b.Name); });
+
+        var x1 = d3.scale.ordinal()
+                   .rangeRoundBands([0, width], .1)
+                   .domain(data.sort(this.checked
+           	       ? function(a, b) { return b.total - a.total; }
+        	       : function(a, b) { return d3.ascending(a.Name, b.Name); })
+        	       .map(function(d) { return d.Name; }));
+                   
+    	var x0 = x.domain(data.sort(this.checked
+        	? function(a, b) { return b.total - a.total; }
+        	: function(a, b) { return d3.ascending(a.Name, b.Name); })
+        	.map(function(d) { return d.Name; }))
+        	.copy();
+
+    	var transition = svg.transition().duration(500),
+        	delay = function(d, i) { return i * 50; };
+
+    	transition.selectAll(".bar")
+    		.delay(delay)
+    		.attr("transform", function(d) { return "translate(" + x1(d.Name) + ",0)"; });
+    
+    	transition.select(".x.axis")
+        	.call(xAxis)
+      		.selectAll("g")
+        	.delay(delay)
+        	.selectAll("text")  
+            .style("text-anchor", "end")
+            .attr("dx", "-.8em")
+            .attr("dy", ".15em")
+            .attr("transform", function(d) {
+                return "rotate(-65)" 
+                });
+
+  	}
+
+});
+});
+}
+
+draw_senate(false);
+
+</script>
+
